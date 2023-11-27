@@ -11,7 +11,7 @@ namespace enc {
 
 static constexpr std::size_t kEncryptionDepth = 100;
 
-template<std::uint64_t T>
+template<std::integral auto T>
 concept NonZero = T != 0;
 
 template<std::uint64_t X, std::uint64_t Y, std::uint64_t Z> requires NonZero<Y> && NonZero<Z>
