@@ -275,4 +275,5 @@ int __cdecl main(int argc, const char **argv, const char **envp)
 ```
 
 **Notes**
+
 Your encrypted value will at some point appear on the stack. It's important to remember that this is only an inconvenience for reverse engineers. There is no BCF or other inconveniences for reverse engineers in this library. All of the encryption could be automatically optimized away.
