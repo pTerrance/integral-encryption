@@ -11,6 +11,7 @@ int main() {
 ```
 
 **Decompiled**
+
 This result uses a low 10-instruction encryption depth. Two printf examples encrypting 0xDEADBEEF. As you can see, this results in two completely different encryption algorithms.
 ```c++
 int __cdecl main(int argc, const char **argv, const char **envp)
