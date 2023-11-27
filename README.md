@@ -1,4 +1,4 @@
-A Compile time encryption for integral constants without macro abuse. Unique encryption keys and encryption algorithms for every usage. Completly new output for each compilation. Tested and working on MSVC, Clang, and GCC.
+A compile time encryption library for integral constants without macro abuse. Unique encryption keys and encryption algorithms for every usage. Completly new output for each compilation. Tested and working on MSVC, Clang, and GCC.
 
 **Example Usage**
 
