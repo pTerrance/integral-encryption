@@ -9,7 +9,7 @@
 namespace enc {
 #define ENCRYPTION_FORCEINLINE __forceinline
 
-static constexpr std::size_t kEncryptionDepth = 100;
+static constexpr std::size_t kEncryptionDepth = 300;
 
 template<std::integral auto T>
 concept NonZero = T != 0;
@@ -67,7 +67,6 @@ static constexpr std::uint64_t kRandomTimeBasedSeed =
 static constexpr std::uint64_t kRandomSeed = 0xEC0DEADBEEFC0FFE ^ kRandomTimeBasedSeed;
 
 enum class OperationType { kAdd, kSub, kXor, kRotateLeft, kRotateRight };
-
 static constexpr std::size_t kAmountOperations = 5;
 
 template<OperationType, std::integral T>
@@ -76,27 +75,27 @@ struct Operations;
 template<std::integral T>
 struct Operations<OperationType::kAdd, T> {
   ENCRYPTION_FORCEINLINE static constexpr void Do(T &data, const T value) noexcept { data += value; }
-  ENCRYPTION_FORCEINLINE static constexpr void Undo(volatile T &data, const T value) noexcept { data -= value; }
+  ENCRYPTION_FORCEINLINE static constexpr void Undo(T &data, const T value) noexcept { data -= value; }
 };
 template<std::integral T>
 struct Operations<OperationType::kSub, T> {
   ENCRYPTION_FORCEINLINE static constexpr void Do(T &data, const T value) noexcept { data -= value; }
-  ENCRYPTION_FORCEINLINE static constexpr void Undo(volatile T &data, const T value) noexcept { data += value; }
+  ENCRYPTION_FORCEINLINE static constexpr void Undo(T &data, const T value) noexcept { data += value; }
 };
 template<std::integral T>
 struct Operations<OperationType::kXor, T> {
   ENCRYPTION_FORCEINLINE static constexpr void Do(T &data, const T value) noexcept { data ^= value; }
-  ENCRYPTION_FORCEINLINE static constexpr void Undo(volatile T &data, const T value) noexcept { data ^= value; }
+  ENCRYPTION_FORCEINLINE static constexpr void Undo(T &data, const T value) noexcept { data ^= value; }
 };
 template<std::integral T>
 struct Operations<OperationType::kRotateLeft, T> {
   ENCRYPTION_FORCEINLINE static constexpr void Do(T &data, const T value) noexcept { data = std::rotl(data,static_cast<int>(value)); }
-  ENCRYPTION_FORCEINLINE static constexpr void Undo(volatile T &data, const T value) noexcept { data = std::rotr(data, static_cast<int>(value)); }
+  ENCRYPTION_FORCEINLINE static constexpr void Undo(T &data, const T value) noexcept { data = std::rotr(data, static_cast<int>(value)); }
 };
 template<std::integral T>
 struct Operations<OperationType::kRotateRight, T> {
   ENCRYPTION_FORCEINLINE static constexpr void Do(T &data, const T value) noexcept { data = std::rotr(data, static_cast<int>(value)); }
-  ENCRYPTION_FORCEINLINE static constexpr void Undo(volatile T &data, const T value) noexcept { data = std::rotl(data, static_cast<int>(value)); }
+  ENCRYPTION_FORCEINLINE static constexpr void Undo(T &data, const T value) noexcept { data = std::rotl(data, static_cast<int>(value)); }
 };
 
 template<std::size_t N>
@@ -124,6 +123,7 @@ ENCRYPTION_FORCEINLINE constexpr void ConstexprFor(const F func) noexcept {
   ConstexprFor(func, std::make_index_sequence<N>());
 }
 
+[[nodiscard]]
 ENCRYPTION_FORCEINLINE constexpr std::uint64_t RandomRuntime(const std::uint64_t iterations = 0,
                                                              const std::uint64_t seed = kRandomSeed) noexcept {
   std::uint64_t x = seed ^ 0x3C9A83566FA12;
@@ -155,11 +155,17 @@ ENCRYPTION_FORCEINLINE constexpr decltype(auto) GenerateSeeds() noexcept {
 template<std::integral T, std::uint64_t Seed = kRandomSeed, std::size_t EncryptionDepth = kEncryptionDepth>
 class IntegralEncryption {
  public:
-  ENCRYPTION_FORCEINLINE explicit consteval IntegralEncryption(T to_encrypt) noexcept: backing_(Encrypt(to_encrypt)) {}
+  ENCRYPTION_FORCEINLINE explicit consteval IntegralEncryption(T to_encrypt) noexcept : backing_(Encrypt(to_encrypt)) {}
   ENCRYPTION_FORCEINLINE ~IntegralEncryption() noexcept { backing_ = 0; }
   IntegralEncryption(IntegralEncryption &) = delete;
   IntegralEncryption(IntegralEncryption &&) = delete;
 
+  [[nodiscard]]
+  ENCRYPTION_FORCEINLINE constexpr decltype(auto) operator()() const noexcept { return backing_; }
+
+  [[nodiscard]]
+  ENCRYPTION_FORCEINLINE constexpr decltype(auto) Decrypt() const noexcept { return Decrypt(backing_); }
+ private:
   [[nodiscard]]
   ENCRYPTION_FORCEINLINE consteval decltype(auto) Encrypt(T to_encrypt) const noexcept {
 	ConstevalFor<EncryptionDepth>([&to_encrypt](const auto e) consteval noexcept -> void {
@@ -171,17 +177,22 @@ class IntegralEncryption {
 
   [[nodiscard]]
   ENCRYPTION_FORCEINLINE constexpr decltype(auto) Decrypt(T to_decrypt) const noexcept {
-	ConstexprFor<EncryptionDepth>([&to_decrypt](const auto e) constexpr noexcept -> void {
+	// To avoid full optimizations
+	const auto *const always_positive = reinterpret_cast<const std::uintptr_t*>(this);
+
+	ConstexprFor<EncryptionDepth>([always_positive, &to_decrypt](const auto e) noexcept -> void {
 	  constexpr std::size_t kReverseIndex = EncryptionDepth - e.kIndex - 1;
 	  constexpr std::uint64_t kGen = kCompileTimeRandomValue<kReverseIndex, Seed>;
-	  Operations<static_cast<OperationType>(kGeneratedSeedValues[kReverseIndex] % kAmountOperations), T>::Undo(to_decrypt, kGen);
+
+	  if(always_positive) {
+	    Operations<static_cast<OperationType>(kGeneratedSeedValues[kReverseIndex] % kAmountOperations), T>::Undo(to_decrypt, kGen);
+	  } else {
+	    Operations<static_cast<OperationType>(kGeneratedSeedValues[kReverseIndex] % kAmountOperations), T>::Do(to_decrypt, kGen);
+	  }
 	});
 	return to_decrypt;
   }
 
-  [[nodiscard]]
-  ENCRYPTION_FORCEINLINE constexpr decltype(auto) operator()() const noexcept { return Decrypt(backing_); }
- private:
   std::uint64_t backing_;
   static constexpr std::array<std::uint64_t, EncryptionDepth> kGeneratedSeedValues = GenerateSeeds<EncryptionDepth, Seed>();
 };
@@ -190,4 +201,4 @@ template<std::uint64_t Base, std::uint64_t Line, std::integral auto Value>
 static constexpr std::uint64_t kCreateIntegralSeed = (Base ^ Value) ^ (Line * (0x69420421266 ^ Value));
 }
 
-#define INTEGRAL_ENC(x) enc::IntegralEncryption<decltype(x), enc::kCreateIntegralSeed<enc::kRandomSeed, __LINE__, x>>{x}()
+#define INTEGRAL_ENC(x) enc::IntegralEncryption<decltype(x), enc::kCreateIntegralSeed<enc::kRandomSeed, __LINE__, x>>(x).Decrypt()
